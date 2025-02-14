@@ -2,7 +2,11 @@ package astiav
 
 //#include <libavutil/audio_fifo.h>
 import "C"
-import "unsafe"
+import (
+	"fmt"
+	"runtime"
+	"unsafe"
+)
 
 // https://ffmpeg.org/doxygen/7.0/structAVAudioFifo.html
 type AudioFifo struct {
@@ -19,6 +23,29 @@ func newAudioFifoFromC(c *C.AVAudioFifo) *AudioFifo {
 // https://ffmpeg.org/doxygen/7.0/group__lavu__audiofifo.html#ga9d792394f0615a329aec47847f8f8784
 func AllocAudioFifo(sampleFmt SampleFormat, channels int, nbSamples int) *AudioFifo {
 	return newAudioFifoFromC(C.av_audio_fifo_alloc(C.enum_AVSampleFormat(sampleFmt), C.int(channels), C.int(nbSamples)))
+}
+
+type AutoCleanupAudioFifo struct {
+	*AudioFifo
+}
+
+func (s *AutoCleanupAudioFifo) Free() {
+	//
+}
+
+func NewAudioFifo(sampleFmt SampleFormat, channels int, nbSamples int) *AutoCleanupAudioFifo {
+	fifo := &AutoCleanupAudioFifo{
+		AudioFifo: &AudioFifo{
+			c: C.av_audio_fifo_alloc(C.enum_AVSampleFormat(sampleFmt), C.int(channels), C.int(nbSamples)),
+		},
+	}
+	var addr unsafe.Pointer
+	addr = unsafe.Pointer(fifo.c)
+	runtime.AddCleanup(fifo, func(p unsafe.Pointer) {
+		fmt.Println("AudioFifo freed:", p)
+		C.av_audio_fifo_free((*C.AVAudioFifo)(p))
+	}, addr)
+	return fifo
 }
 
 // https://ffmpeg.org/doxygen/7.0/group__lavu__audiofifo.html#ga27c1e16e5f09940d6016b1971c0b5742
